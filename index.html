@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>오션중학교 2026 독도의 날 기념 N행시 공모전</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & React DOM CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;600;700;800;900&family=Gowun+Batang:wght@400;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ocean: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              500: '#0284c7',
+              700: '#0369a1',
+              900: '#0c4a6e',
+            },
+            dokdo: {
+              gold: '#d97706',
+              deep: '#1e3a8a',
+              teal: '#0d9488',
+            }
+          },
+          fontFamily: {
+            sans: ['Noto Sans KR', 'sans-serif'],
+            batang: ['Gowun Batang', 'serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+      min-height: 100vh;
+      color: #f8fafc;
+    }
+    
+    .font-batang {
+      font-family: 'Gowun Batang', serif;
+    }
+
+    .glass-panel {
+      background: rgba(30, 41, 59, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Print styling specifically for Card News export */
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+      body {
+        background: white !important;
+        color: black !important;
+      }
+      .print-area {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 20px !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      .card-news-item {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        box-shadow: none !important;
+        border: 2px solid #0284c7 !important;
+        background: white !important;
+        color: #0f172a !important;
+      }
+    }
+  </style>
+</head>
+<body class="selection:bg-cyan-500 selection:text-white">
+  <div id="root"></div>
+
+  <!-- Firebase Integration Script -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Global Firebase setup with fallbacks
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'ocean-middle-dokdo-2026';
+    let db = null;
+    let auth = null;
+    let currentUser = null;
+
+    try {
+      if (typeof __firebase_config !== 'undefined') {
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+
+        // Authenticate immediately
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          signInWithCustomToken(auth, __initial_auth_token).catch(() => signInAnonymously(auth));
+        } else {
+          signInAnonymously(auth).catch(console.error);
+        }
+
+        onAuthStateChanged(auth, (user) => {
+          currentUser = user;
+          window.dispatchEvent(new CustomEvent('firebaseAuthReady', { detail: { user, db, appId } }));
+        });
+      }
+    } catch (e) {
+      console.warn("Firebase initialization fallback mode enabled:", e);
+    }
+
+    // Expose reference globally for React components
+    window.oceanFirebase = {
+      getDb: () => db,
+      getAuth: () => auth,
+      getAppId: () => appId,
+      getUser: () => currentUser,
+      getCollectionPath: () => `artifacts/${appId}/public/data/ocean_dokdo_poems`
+    };
+  </script>
+
+  <!-- React Application Logic -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
+
+    // 1. Keyword dataset based on school guidelines
+    const KEYWORDS_DATA = [
+      // 초급 코스 (3행시)
+      { 
+        id: 'dokdori', 
+        name: '독도리', 
+        level: '초급', 
+        lines: 3, 
+        chars: ['독', '도', '리'], 
+        desc: '경상북도 울릉군 울릉읍 독도리 — 우리나라의 명백한 행정 구역이자 영토 주권의 상징' 
+      },
+      { 
+        id: 'isabu', 
+        name: '이사부', 
+        level: '초급', 
+        lines: 3, 
+        chars: ['이', '사', '부'], 
+        desc: '서기 512년(신라 지증왕 13년) 우산국을 신라 영토로 최초 편입시킨 신라의 장군' 
+      },
+      { 
+        id: 'anyongbok', 
+        name: '안용복', 
+        level: '초급', 
+        lines: 3, 
+        chars: ['안', '용', '복'], 
+        desc: '조선 시대 일본에 맞서 독도가 조선 땅임을 확약받은 자랑스러운 민간 외교가' 
+      },
+      { 
+        id: 'ulleungdo', 
+        name: '울릉도', 
+        level: '초급', 
+        lines: 3, 
+        chars: ['울', '릉', '도'], 
+        desc: '독도에서 가장 가까운 형제 섬이자 역사적·지리적 짝꿍 섬 (거리 87.4km)' 
+      },
+
+      // 중급 코스 (4행시)
+      { 
+        id: 'donghaebada', 
+        name: '동해바다', 
+        level: '중급', 
+        lines: 4, 
+        chars: ['동', '해', '바', '다'], 
+        desc: '독도가 당당히 서 있는 대한민국의 푸르고 넓은 바다' 
+      },
+      { 
+        id: 'samguksagi', 
+        name: '삼국사기', 
+        level: '중급', 
+        lines: 4, 
+        chars: ['삼', '국', '사', '기'], 
+        desc: '이사부 장군의 우산국 복속 사실이 최초로 기록된 역사서 (김부식 지음)' 
+      },
+      { 
+        id: 'daehanjeguk', 
+        name: '대한제국', 
+        level: '중급', 
+        lines: 4, 
+        chars: ['대', '한', '제', '국'], 
+        desc: '1900년 칙령 제41호로 독도의 영토 관할권을 세계에 공식 선포한 국가' 
+      },
+      { 
+        id: 'daehanminguk', 
+        name: '대한민국', 
+        level: '중급', 
+        lines: 4, 
+        chars: ['대', '한', '민', '국'], 
+        desc: '영토 주권과 국가적 자부심을 가슴 깊이 품은 자랑스러운 우리 나라' 
+      },
+      { 
+        id: 'dokdogangchi', 
+        name: '독도강치', 
+        level: '중급', 
+        lines: 4, 
+        chars: ['독', '도', '강', '치'], 
+        desc: '일제강점기 남획으로 사라진 독도 바다의 슬픈 역사를 가진 생명체' 
+      },
+      { 
+        id: 'badasaja', 
+        name: '바다사자', 
+        level: '중급', 
+        lines: 4, 
+        chars: ['바', '다', '사', '자'], 
+        desc: '독도 연안을 평화롭게 누비던 독도 강치의 다른 이름' 
+      },
+
+      // 상급 코스 (5행시 이상)
+      { 
+        id: 'cheonyeongimyeol', 
+        name: '천연기념물', 
+        level: '상급', 
+        lines: 5, 
+        chars: ['천', '연', '기', '념', '물'], 
+        desc: '독도 전체가 지정되어 보호받고 있는 국가 지정 문화재 (천연기념물 제336호)' 
+      },
+      { 
+        id: 'dokdogyeongbidae', 
+        name: '독도경비대', 
+        level: '상급', 
+        lines: 5, 
+        chars: ['독', '도', '경', '비', '대'], 
+        desc: '365일 24시간 독도를 든든하게 지켜주는 자긍심 높은 수호자들' 
+      },
+      { 
+        id: 'chingryeongjesail', 
+        name: '칙령제사일', 
+        level: '상급', 
+        lines: 5, 
+        chars: ['칙', '령', '제', '사', '일'], 
+        desc: '1900년 10월 25일 고종 황제가 독도를 울도군 관할로 공식 선포한 날 (독도의 날 계기)' 
+      }
+    ];
+
+    const playTone = (type) => {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        if (type === 'click') {
+          osc.frequency.setValueAtTime(440, ctx.currentTime);
+          gain.gain.setValueAtTime(0.08, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.1);
+        } else if (type === 'submit') {
+          osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+          osc.frequency.exponentialRampToValueAtTime(659.25, ctx.currentTime + 0.15); // E5
+          osc.frequency.exponentialRampToValueAtTime(783.99, ctx.currentTime + 0.3); // G5
+          gain.gain.setValueAtTime(0.12, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.4);
+        }
+      } catch(e) {
+        // Audio API disabled or blocked
+      }
+    };
+
+    function DokdoApp() {
+      // Navigation states
+      const [viewMode, setViewMode] = useState('student'); // 'student' or 'admin'
+      const [studentStep, setStudentStep] = useState(1); // 1: Select Keyword, 2: Write Poem, 3: Student Info, 4: Complete
+      
+      // Form States
+      const [selectedKeyword, setSelectedKeyword] = useState(KEYWORDS_DATA[0]);
+      const [poemLines, setPoemLines] = useState({});
+      const [studentGrade, setStudentGrade] = useState('1');
+      const [studentClass, setStudentClass] = useState('1');
+      const [studentNumber, setStudentNumber] = useState('1');
+      const [studentName, setStudentName] = useState('');
+
+      // Submissions data store
+      const [submissions, setSubmissions] = useState([]);
+      const [loadingData, setLoadingData] = useState(true);
+
+      // Admin & Filter States
+      const [adminFilterLevel, setAdminFilterLevel] = useState('전체');
+      const [adminFilterWord, setAdminFilterWord] = useState('전체');
+      const [adminSearch, setAdminSearch] = useState('');
+      const [cardNewsTheme, setCardNewsTheme] = useState('ocean'); // 'ocean', 'sunset', 'traditional', 'emerald'
+      const [adminViewTab, setAdminViewTab] = useState('list'); // 'list' or 'cardnews'
+      const [adminPinModal, setAdminPinModal] = useState(false);
+      const [adminPinInput, setAdminPinInput] = useState('');
+      const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+
+      // Modal & Toast Notification State
+      const [toastMessage, setToastMessage] = useState(null);
+
+      const showToast = (msg) => {
+        setToastMessage(msg);
+        setTimeout(() => setToastMessage(null), 3500);
+      };
+
+      useEffect(() => {
+        let unsubscribe = null;
+
+        const setupListener = () => {
+          const fb = window.oceanFirebase;
+          const db = fb ? fb.getDb() : null;
+
+          if (db) {
+            const collectionPath = fb.getCollectionPath();
+            try {
+              const { collection } = window.firebaseFirestoreModule || {};
+              // Fallback to simple snapshot listener
+              const pathParts = collectionPath.split('/');
+              // Using standard module imports from dynamic window references
+              import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js").then((fs) => {
+                const colRef = fs.collection(db, pathParts[0], pathParts[1], pathParts[2], pathParts[3], pathParts[4], pathParts[5]);
+                
+                unsubscribe = fs.onSnapshot(colRef, 
+                  (snapshot) => {
+                    const fetched = [];
+                    snapshot.forEach(doc => {
+                      fetched.push({ id: doc.id, ...doc.data() });
+                    });
+                    // Sort locally by timestamp descending
+                    fetched.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                    setSubmissions(fetched);
+                    setLoadingData(false);
+                  },
+                  (error) => {
+                    console.warn("Firestore error, loading sample fallback:", error);
+                    loadSampleData();
+                  }
+                );
+              }).catch(() => loadSampleData());
+            } catch (err) {
+              loadSampleData();
+            }
+          } else {
+            // Load sample seed data if Firestore is offline
+            loadSampleData();
+          }
+        };
+
+        const loadSampleData = () => {
+          const sampleData = [
+            {
+              id: 'sample-1',
+              keyword: '독도리',
+              level: '초급',
+              lines: { 
+                '독': '독도는 우리 땅, 경상북도 울릉군 울릉읍', 
+                '도': '도도한 푸른 동해 물결 위에 우뚝 선', 
+                '리': '리(이) 땅 대한민국의 명백한 자랑스러운 영토입니다!' 
+              },
+              grade: '1', classNum: '3', number: '12', name: '김독도',
+              isStarred: true,
+              createdAt: { seconds: Date.now() / 1000 - 3600 }
+            },
+            {
+              id: 'sample-2',
+              keyword: '이사부',
+              level: '초급',
+              lines: { '이': '이 땅 독도를 가슴 깊이 새기며', '사': '사람들의 마음속에 영원히 살려낸', '부': '부리부리한 기개의 신라 장군 이사부!' },
+              grade: '2', classNum: '1', number: '05', name: '이수호',
+              isStarred: true,
+              createdAt: { seconds: Date.now() / 1000 - 7200 }
+            },
+            {
+              id: 'sample-3',
+              keyword: '천연기념물',
+              level: '상급',
+              lines: {
+                '천': '천혜의 자연 경관이 숨 쉬는 이곳,',
+                '연': '연두빛 희귀 생물들이 어우러지고',
+                '기': '기묘한 바위들이 가득한 푸른 영토.',
+                '념': '념원하던 평화가 깃든 유산이니,',
+                '물': '물려주리라 후손에게 영원히 빛나도록!'
+              },
+              grade: '3', classNum: '5', number: '24', name: '박해양',
+              isStarred: true,
+              createdAt: { seconds: Date.now() / 1000 - 10800 }
+            }
+          ];
+          setSubmissions(sampleData);
+          setLoadingData(false);
+        };
+
+        window.addEventListener('firebaseAuthReady', setupListener);
+        setupListener();
+
+        return () => {
+          if (unsubscribe) unsubscribe();
+          window.removeEventListener('firebaseAuthReady', setupListener);
+        };
+      }, []);
+
+      // Initialize poem input lines when keyword changes
+      useEffect(() => {
+        if (selectedKeyword) {
+          const initialLines = {};
+          selectedKeyword.chars.forEach(char => {
+            initialLines[char] = poemLines[char] || '';
+          });
+          setPoemLines(initialLines);
+        }
+      }, [selectedKeyword]);
+
+      const handleKeywordSelect = (kw) => {
+        playTone('click');
+        setSelectedKeyword(kw);
+        setPoemLines({});
+        setStudentStep(2);
+      };
+
+      const handlePoemInputChange = (char, val) => {
+        setPoemLines(prev => ({ ...prev, [char]: val }));
+      };
+
+      const isPoemComplete = useMemo(() => {
+        if (!selectedKeyword) return false;
+        return selectedKeyword.chars.every(char => poemLines[char] && poemLines[char].trim().length > 0);
+      }, [selectedKeyword, poemLines]);
+
+      const handleSubmitPoem = async () => {
+        if (!studentName.trim()) {
+          showToast('⚠️ 작성자의 이름을 입력해 주세요!');
+          return;
+        }
+
+        playTone('submit');
+
+        const newPoemData = {
+          keyword: selectedKeyword.name,
+          level: selectedKeyword.level,
+          lines: poemLines,
+          grade: studentGrade,
+          classNum: studentClass,
+          number: studentNumber,
+          name: studentName.trim(),
+          isStarred: false,
+          createdAt: new Date()
+        };
+
+        const fb = window.oceanFirebase;
+        const db = fb ? fb.getDb() : null;
+
+        if (db) {
+          try {
+            const fs = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+            const collectionPath = fb.getCollectionPath();
+            const pathParts = collectionPath.split('/');
+            const colRef = fs.collection(db, pathParts[0], pathParts[1], pathParts[2], pathParts[3], pathParts[4], pathParts[5]);
+            await fs.addDoc(colRef, {
+              ...newPoemData,
+              createdAt: fs.serverTimestamp()
+            });
+          } catch (e) {
+            console.error("Firestore save error, saving locally:", e);
+            // Fallback save to local state
+            setSubmissions(prev => [{ id: 'local-' + Date.now(), ...newPoemData, createdAt: { seconds: Date.now() / 1000 } }, ...prev]);
+          }
+        } else {
+          setSubmissions(prev => [{ id: 'local-' + Date.now(), ...newPoemData, createdAt: { seconds: Date.now() / 1000 } }, ...prev]);
+        }
+
+        setStudentStep(4);
+        showToast('🎉 N행시가 성공적으로 제출되었습니다!');
+      };
+
+      const resetStudentForm = () => {
+        playTone('click');
+        setStudentStep(1);
+        setPoemLines({});
+        setStudentName('');
+      };
+
+      // Admin authentication toggle
+      const handleAdminAccess = () => {
+        playTone('click');
+        if (isAdminAuthenticated) {
+          setViewMode('admin');
+        } else {
+          setAdminPinModal(true);
+        }
+      };
+
+      const verifyAdminPin = () => {
+        // Simple default school PIN verification (2026 or 1025)
+        if (adminPinInput === '2026' || adminPinInput === '1025' || adminPinInput === 'ocean') {
+          setIsAdminAuthenticated(true);
+          setAdminPinModal(false);
+          setViewMode('admin');
+          setAdminPinInput('');
+          showToast('🔓 관리자 인증되었습니다.');
+        } else {
+          showToast('❌ 비밀번호가 올바르지 않습니다. (기본: 2026 또는 1025)');
+        }
+      };
+
+      // Toggle starred status for card news feature
+      const toggleStar = async (submissionId) => {
+        playTone('click');
+        const target = submissions.find(s => s.id === submissionId);
+        if (!target) return;
+        const newStar = !target.isStarred;
+
+        // Update local state immediately
+        setSubmissions(prev => prev.map(item => item.id === submissionId ? { ...item, isStarred: newStar } : item));
+
+        const fb = window.oceanFirebase;
+        const db = fb ? fb.getDb() : null;
+        if (db && !submissionId.startsWith('sample-') && !submissionId.startsWith('local-')) {
+          try {
+            const fs = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+            const collectionPath = fb.getCollectionPath();
+            const pathParts = collectionPath.split('/');
+            const docRef = fs.doc(db, pathParts[0], pathParts[1], pathParts[2], pathParts[3], pathParts[4], pathParts[5], submissionId);
+            await fs.updateDoc(docRef, { isStarred: newStar });
+          } catch(e) {
+            console.error(e);
+          }
+        }
+      };
+
+      // Filtered submissions for admin view
+      const filteredSubmissions = useMemo(() => {
+        return submissions.filter(item => {
+          const matchLevel = adminFilterLevel === '전체' || item.level === adminFilterLevel;
+          const matchWord = adminFilterWord === '전체' || item.keyword === adminFilterWord;
+          const searchLower = adminSearch.toLowerCase();
+          const matchSearch = !adminSearch || 
+            item.name.toLowerCase().includes(searchLower) ||
+            item.keyword.toLowerCase().includes(searchLower) ||
+            `${item.grade}학년 ${item.classNum}반`.includes(searchLower);
+          return matchLevel && matchWord && matchSearch;
+        });
+      }, [submissions, adminFilterLevel, adminFilterWord, adminSearch]);
+
+      return (
+        <div className="min-h-screen pb-16 flex flex-col">
+          {/* Top Header Banner */}
+          <header className="no-print sticky top-0 z-40 border-b border-cyan-500/20 bg-slate-900/90 backdrop-blur-md px-4 py-3 shadow-lg">
+            <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setViewMode('student'); setStudentStep(1); }}>
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-extrabold text-xl shadow-md shadow-cyan-500/30">
+                  🌊
+                </div>
+                <div>
+                  <div className="text-xs text-cyan-400 font-semibold tracking-wider flex items-center gap-1">
+                    <span>오션중학교</span> • <span>2026 독도교육주간</span>
+                  </div>
+                  <h1 className="text-lg font-bold text-white tracking-tight">독도 사랑 N행시 공모전</h1>
+                </div>
+              </div>
+
+              {/* View Switching Navigation */}
+              <div className="flex items-center gap-2 bg-slate-800/80 p-1 rounded-xl border border-slate-700">
+                <button
+                  onClick={() => { playTone('click'); setViewMode('student'); }}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    viewMode === 'student'
+                      ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  ✏️ 학생 N행시 작성
+                </button>
+                <button
+                  onClick={handleAdminAccess}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    viewMode === 'admin'
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  📊 관리자 & 카드뉴스
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {/* Main Body Layout */}
+          <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6">
+            {/* Student View Screen */}
+            {viewMode === 'student' && (
+              <div>
+                {/* Event Intro Card */}
+                <div className="glass-panel rounded-2xl p-6 mb-6 border-l-4 border-l-cyan-400 shadow-xl relative overflow-hidden">
+                  <div className="absolute top-0 right-0 translate-x-4 -translate-y-4 opacity-10 text-9xl pointer-events-none select-none">
+                    🇰🇷
+                  </div>
+                  <span className="inline-block px-3 py-1 bg-cyan-500/20 text-cyan-300 text-xs font-bold rounded-full mb-2">
+                    10월 25일 독도의 날 기념 행사
+                  </span>
+                  <h2 className="text-2xl font-black text-white mb-2">
+                    독도의 역사와 가치를 마음에 새기는 N행시 짓기
+                  </h2>
+                  <p className="text-slate-300 text-sm leading-relaxed max-w-2xl">
+                    제시어의 난이도를 선택한 뒤 독도에 대한 창의적이고 감동적인 시를 완성해 보세요. 
+                    제출된 우수한 N행시는 <span className="text-cyan-300 font-semibold">오션중학교 카드뉴스</span>로 제작되어 교내에 게시됩니다!
+                  </p>
+                  
+                  {/* Step Progress Indicator */}
+                  <div className="mt-6 grid grid-cols-3 gap-2">
+                    <div className={`h-2 rounded-full transition-all ${studentStep >= 1 ? 'bg-cyan-400' : 'bg-slate-700'}`}></div>
+                    <div className={`h-2 rounded-full transition-all ${studentStep >= 2 ? 'bg-cyan-400' : 'bg-slate-700'}`}></div>
+                    <div className={`h-2 rounded-full transition-all ${studentStep >= 3 ? 'bg-cyan-400' : 'bg-slate-700'}`}></div>
+                  </div>
+                </div>
+
+                {/* STEP 1: Select Level and Keyword */}
+                {studentStep === 1 && (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-cyan-500 text-slate-950 font-black text-xs flex items-center justify-center">1</span>
+                        제시어 코스를 선택하세요
+                      </h3>
+                      <span className="text-xs text-slate-400">총 {KEYWORDS_DATA.length}개 제시어</span>
+                    </div>
+
+                    {/* Beginner Level (초급 - 3행시) */}
+                    <div className="glass-panel p-5 rounded-2xl border border-emerald-500/30">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 text-xs font-bold rounded-lg border border-emerald-500/40">
+                            초급 코스 (3행시)
+                          </span>
+                          <span className="text-xs text-slate-400">전 학년 참여 유도용</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {KEYWORDS_DATA.filter(k => k.level === '초급').map(kw => (
+                          <div 
+                            key={kw.id}
+                            onClick={() => handleKeywordSelect(kw)}
+                            className="glass-card hover:bg-slate-700/60 p-4 rounded-xl border border-slate-700 hover:border-emerald-400 cursor-pointer transition-all transform hover:-translate-y-0.5 group"
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-xl font-black text-emerald-300 group-hover:text-emerald-200">
+                                [{kw.name}]
+                              </span>
+                              <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                                {kw.lines}행시
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-300 leading-snug">{kw.desc}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Intermediate Level (중급 - 4행시) */}
+                    <div className="glass-panel p-5 rounded-2xl border border-sky-500/30">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 bg-sky-500/20 text-sky-400 text-xs font-bold rounded-lg border border-sky-500/40">
+                            중급 코스 (4행시)
+                          </span>
+                          <span className="text-xs text-slate-400">역사 · 지리 융합형</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {KEYWORDS_DATA.filter(k => k.level === '중급').map(kw => (
+                          <div 
+                            key={kw.id}
+                            onClick={() => handleKeywordSelect(kw)}
+                            className="glass-card hover:bg-slate-700/60 p-4 rounded-xl border border-slate-700 hover:border-sky-400 cursor-pointer transition-all transform hover:-translate-y-0.5 group"
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-xl font-black text-sky-300 group-hover:text-sky-200">
+                                [{kw.name}]
+                              </span>
+                              <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                                {kw.lines}행시
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-300 leading-snug">{kw.desc}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Advanced Level (상급 - 5행시) */}
+                    <div className="glass-panel p-5 rounded-2xl border border-purple-500/30">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 bg-purple-500/20 text-purple-400 text-xs font-bold rounded-lg border border-purple-500/40">
+                            상급 코스 (5행시)
+                          </span>
+                          <span className="text-xs text-slate-400">논리력과 창의력 요구</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {KEYWORDS_DATA.filter(k => k.level === '상급').map(kw => (
+                          <div 
+                            key={kw.id}
+                            onClick={() => handleKeywordSelect(kw)}
+                            className="glass-card hover:bg-slate-700/60 p-4 rounded-xl border border-slate-700 hover:border-purple-400 cursor-pointer transition-all transform hover:-translate-y-0.5 group"
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-lg font-black text-purple-300 group-hover:text-purple-200">
+                                [{kw.name}]
+                              </span>
+                              <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                                {kw.lines}행시
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-300 leading-snug">{kw.desc}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* STEP 2 & 3: Write Poem & Enter Student Info */}
+                {(studentStep === 2 || studentStep === 3) && selectedKeyword && (
+                  <div className="space-y-6">
+                    {/* Selected Keyword Bar */}
+                    <div className="glass-panel p-4 rounded-2xl flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <button 
+                          onClick={() => setStudentStep(1)}
+                          className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all"
+                        >
+                          ← 제시어 변경
+                        </button>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl font-black text-cyan-300">[{selectedKeyword.name}]</span>
+                            <span className="text-xs px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded font-semibold">
+                              {selectedKeyword.level} ({selectedKeyword.lines}행시)
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-0.5">{selectedKeyword.desc}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Writing Inputs Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                      {/* Form Inputs (Left 7 Cols) */}
+                      <div className="lg:col-span-7 space-y-4">
+                        <div className="glass-panel p-5 rounded-2xl space-y-4">
+                          <h3 className="text-sm font-bold text-slate-300 flex items-center justify-between border-b border-slate-700/60 pb-3">
+                            <span>✏️ 행별 문장 작성하기</span>
+                            <span className="text-xs text-slate-400 font-normal">각 첫 글자로 시를 완성하세요</span>
+                          </h3>
+
+                          {selectedKeyword.chars.map((char, index) => (
+                            <div key={index} className="space-y-1">
+                              <label className="text-xs font-semibold text-slate-400 flex items-center gap-1">
+                                <span className="w-5 h-5 rounded bg-cyan-500/30 text-cyan-300 flex items-center justify-center font-bold text-xs">
+                                  {char}
+                                </span>
+                                <span>'{char}'(으)로 시작하는 문장</span>
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-700 flex items-center justify-center text-white font-black text-lg shadow-inner shrink-0">
+                                  {char}
+                                </div>
+                                <input
+                                  type="text"
+                                  value={poemLines[char] || ''}
+                                  onChange={(e) => handlePoemInputChange(char, e.target.value)}
+                                  placeholder={`'${char}'(으)로 독도 사랑을 표현해 보세요...`}
+                                  className="w-full bg-slate-900/80 border border-slate-700 focus:border-cyan-400 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-all"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Student Info Inputs Section */}
+                        <div className="glass-panel p-5 rounded-2xl space-y-4">
+                          <h3 className="text-sm font-bold text-slate-300 border-b border-slate-700/60 pb-3">
+                            👤 작성자 정보 입력 (오션중학교)
+                          </h3>
+                          
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-400 mb-1">학년</label>
+                              <select
+                                value={studentGrade}
+                                onChange={(e) => setStudentGrade(e.target.value)}
+                                className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-400 rounded-xl px-3 py-2 text-sm text-white outline-none"
+                              >
+                                <option value="1">1학년</option>
+                                <option value="2">2학년</option>
+                                <option value="3">3학년</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-400 mb-1">반</label>
+                              <select
+                                value={studentClass}
+                                onChange={(e) => setStudentClass(e.target.value)}
+                                className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-400 rounded-xl px-3 py-2 text-sm text-white outline-none"
+                              >
+                                {Array.from({ length: 12 }, (_, i) => (
+                                  <option key={i+1} value={i+1}>{i+1}반</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-400 mb-1">번호</label>
+                              <select
+                                value={studentNumber}
+                                onChange={(e) => setStudentNumber(e.target.value)}
+                                className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-400 rounded-xl px-3 py-2 text-sm text-white outline-none"
+                              >
+                                {Array.from({ length: 35 }, (_, i) => (
+                                  <option key={i+1} value={String(i+1).padStart(2, '0')}>{i+1}번</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-400 mb-1">이름</label>
+                            <input
+                              type="text"
+                              value={studentName}
+                              onChange={(e) => setStudentName(e.target.value)}
+                              placeholder="예: 홍길동"
+                              className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-400 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none"
+                            />
+                          </div>
+
+                          <button
+                            onClick={handleSubmitPoem}
+                            disabled={!isPoemComplete}
+                            className={`w-full py-3.5 rounded-xl text-sm font-bold shadow-lg transition-all flex items-center justify-center gap-2 ${
+                              isPoemComplete
+                                ? 'bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white cursor-pointer shadow-cyan-500/20'
+                                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                            }`}
+                          >
+                            <span>🚀 오션중학교 독도 N행시 제출하기</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Live Preview Card (Right 5 Cols) */}
+                      <div className="lg:col-span-5">
+                        <div className="glass-panel p-6 rounded-2xl sticky top-20 border border-cyan-500/30 shadow-2xl space-y-4 bg-gradient-to-b from-slate-900/90 to-slate-950">
+                          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                            <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider">
+                              실시간 카드 미리보기
+                            </span>
+                            <span className="text-xs text-slate-500">오션중학교 카드뉴스 양식</span>
+                          </div>
+
+                          <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 space-y-4 font-batang relative overflow-hidden">
+                            <div className="text-center border-b border-cyan-500/20 pb-3">
+                              <span className="text-xs text-cyan-400 tracking-widest font-sans font-bold block mb-1">
+                                2026 독도의 날 기념
+                              </span>
+                              <h4 className="text-2xl font-black text-white">
+                                [{selectedKeyword.name}]
+                              </h4>
+                            </div>
+
+                            <div className="space-y-3 my-4">
+                              {selectedKeyword.chars.map((char, i) => (
+                                <div key={i} className="flex items-start gap-3 text-sm">
+                                  <span className="w-7 h-7 rounded-lg bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 font-black text-base flex items-center justify-center shrink-0 font-sans">
+                                    {char}
+                                  </span>
+                                  <p className="text-slate-200 pt-1 leading-relaxed break-keep">
+                                    {poemLines[char] ? (
+                                      poemLines[char]
+                                    ) : (
+                                      <span className="text-slate-600 italic">내용을 작성하는 중...</span>
+                                    )}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between font-sans text-xs text-slate-400">
+                              <span>오션중학교</span>
+                              <span>
+                                {studentGrade ? `${studentGrade}학년` : '◯학년'} {studentClass ? `${studentClass}반` : '◯반'} {studentNumber ? `${studentNumber}번` : ''} {studentName || '이름'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50 text-xs text-slate-400">
+                            💡 <span className="font-semibold text-slate-300">알림:</span> 작성한 시는 교내 심사를 통해 우수작으로 선정되며 게시용 카드뉴스로 프린트됩니다.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* STEP 4: Completion Confirmation Card */}
+                {studentStep === 4 && (
+                  <div className="max-w-xl mx-auto glass-panel p-8 rounded-3xl text-center space-y-6 shadow-2xl border border-cyan-400/30">
+                    <div className="w-20 h-20 bg-gradient-to-tr from-emerald-400 to-cyan-500 rounded-full flex items-center justify-center text-4xl mx-auto shadow-lg shadow-cyan-500/30">
+                      🎉
+                    </div>
+
+                    <div className="space-y-2">
+                      <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 text-xs font-bold rounded-full">
+                        제출 완료
+                      </span>
+                      <h3 className="text-2xl font-black text-white">
+                        N행시 제출이 완료되었습니다!
+                      </h3>
+                      <p className="text-slate-300 text-sm">
+                        독도를 향한 따뜻한 마음을 나누어 주셔서 감사합니다.
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 text-left font-batang space-y-3">
+                      <div className="text-center font-sans font-bold text-cyan-400 text-sm border-b border-slate-800 pb-2">
+                        [{selectedKeyword.name}] {selectedKeyword.lines}행시
+                      </div>
+                      {selectedKeyword.chars.map((char, idx) => (
+                        <div key={idx} className="flex items-start gap-2 text-sm text-slate-200">
+                          <span className="font-bold text-cyan-300 font-sans">[{char}]</span>
+                          <span>{poemLines[char]}</span>
+                        </div>
+                      ))}
+                      <div className="text-right font-sans text-xs text-slate-400 pt-2 border-t border-slate-800">
+                        오션중학교 {studentGrade}학년 {studentClass}반 {studentNumber}번 {studentName}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={resetStudentForm}
+                        className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl transition-all"
+                      >
+                        ✏️ 다른 제시어로 또 작성하기
+                      </button>
+                      <button
+                        onClick={() => { playTone('click'); setViewMode('admin'); }}
+                        className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-all"
+                      >
+                        📊 전체 작품 및 카드뉴스 보기
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Admin & Card News Generator Screen */}
+            {viewMode === 'admin' && (
+              <div className="space-y-6">
+                {/* Admin Header Toolbar */}
+                <div className="glass-panel p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                      <span>📊 관리자 시트 & 카드뉴스 생성기</span>
+                      <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-xs rounded border border-amber-500/40 font-normal">
+                        오션중학교 전용
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-1">
+                      제출된 N행시 목록을 확인하고, 우수작을 선택하여 카드뉴스 형태로 출력·게시할 수 있습니다.
+                    </p>
+                  </div>
+
+                  {/* Mode & Export Controls */}
+                  <div className="flex items-center gap-2 w-full md:w-auto">
+                    <button
+                      onClick={() => setAdminViewTab('list')}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                        adminViewTab === 'list'
+                          ? 'bg-slate-700 text-white border border-slate-600'
+                          : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      📋 시트 목록 보기 ({filteredSubmissions.length})
+                    </button>
+                    <button
+                      onClick={() => setAdminViewTab('cardnews')}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                        adminViewTab === 'cardnews'
+                          ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg'
+                          : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      🖼️ 카드뉴스 출력 모드
+                    </button>
+                    <button
+                      onClick={() => window.print()}
+                      className="px-3.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl transition-all shadow"
+                    >
+                      🖨️ 카드뉴스 인쇄 / PDF
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filters & Search Control Bar */}
+                <div className="glass-panel p-4 rounded-xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 no-print">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">코스 난이도 필터</label>
+                    <select
+                      value={adminFilterLevel}
+                      onChange={(e) => setAdminFilterLevel(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-3 py-2 outline-none"
+                    >
+                      <option value="전체">전체 난이도</option>
+                      <option value="초급">초급 (3행시)</option>
+                      <option value="중급">중급 (4행시)</option>
+                      <option value="상급">상급 (5행시)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">제시어 필터</label>
+                    <select
+                      value={adminFilterWord}
+                      onChange={(e) => setAdminFilterWord(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-3 py-2 outline-none"
+                    >
+                      <option value="전체">전체 제시어</option>
+                      {KEYWORDS_DATA.map(k => (
+                        <option key={k.id} value={k.name}>{k.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">이름 / 제시어 검색</label>
+                    <input
+                      type="text"
+                      placeholder="검색어 입력..."
+                      value={adminSearch}
+                      onChange={(e) => setAdminSearch(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-3 py-2 outline-none"
+                    />
+                  </div>
+
+                  {adminViewTab === 'cardnews' && (
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">카드뉴스 테마</label>
+                      <select
+                        value={cardNewsTheme}
+                        onChange={(e) => setCardNewsTheme(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-3 py-2 outline-none"
+                      >
+                        <option value="ocean">🌊 푸른 동해 (기본)</option>
+                        <option value="sunset">🌅 독도 일출 (골드)</option>
+                        <option value="traditional">📜 고지도 한지 (전통)</option>
+                        <option value="emerald">🌿 청정 독도 (에메랄드)</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* TAB 1: Admin Data Table View */}
+                {adminViewTab === 'list' && (
+                  <div className="glass-panel rounded-2xl overflow-hidden border border-slate-800">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-900/90 text-slate-400 border-b border-slate-800 uppercase tracking-wider">
+                          <tr>
+                            <th className="p-3 text-center">우수작</th>
+                            <th className="p-3">학번 / 이름</th>
+                            <th className="p-3">제시어 (난이도)</th>
+                            <th className="p-3">N행시 내용</th>
+                            <th className="p-3">제출 시각</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                          {filteredSubmissions.length === 0 ? (
+                            <tr>
+                              <td colSpan="5" className="p-8 text-center text-slate-500">
+                                조건에 맞는 N행시 제출 내역이 없습니다.
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredSubmissions.map((sub) => (
+                              <tr key={sub.id} className="hover:bg-slate-800/40 transition-colors">
+                                <td className="p-3 text-center">
+                                  <button
+                                    onClick={() => toggleStar(sub.id)}
+                                    className={`text-base transition-transform active:scale-125 ${
+                                      sub.isStarred ? 'text-amber-400' : 'text-slate-600 hover:text-amber-300'
+                                    }`}
+                                    title="우수작 선정 (카드뉴스 강조)"
+                                  >
+                                    {sub.isStarred ? '★' : '☆'}
+                                  </button>
+                                </td>
+                                <td className="p-3 font-semibold whitespace-nowrap text-white">
+                                  {sub.grade}학년 {sub.classNum}반 {sub.number}번<br/>
+                                  <span className="text-cyan-400">{sub.name}</span>
+                                </td>
+                                <td className="p-3 whitespace-nowrap">
+                                  <span className="font-bold text-white">[{sub.keyword}]</span>
+                                  <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                                    {sub.level}
+                                  </span>
+                                </td>
+                                <td className="p-3 font-batang space-y-1">
+                                  {Object.entries(sub.lines || {}).map(([char, line]) => (
+                                    <div key={char} className="leading-snug">
+                                      <span className="font-bold text-cyan-400 mr-1.5">[{char}]</span>
+                                      <span>{line}</span>
+                                    </div>
+                                  ))}
+                                </td>
+                                <td className="p-3 text-slate-500 whitespace-nowrap text-[11px]">
+                                  {sub.createdAt?.seconds 
+                                    ? new Date(sub.createdAt.seconds * 1000).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                    : '방금 전'}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: Card News Output Printable View */}
+                {adminViewTab === 'cardnews' && (
+                  <div className="space-y-4">
+                    <div className="no-print bg-amber-500/10 border border-amber-500/30 p-3.5 rounded-xl text-xs text-amber-300 flex items-center justify-between">
+                      <span>
+                        💡 <b>카드뉴스 게시 사용법:</b> 상단 <span className="font-bold underline cursor-pointer" onClick={() => window.print()}>[🖨️ 카드뉴스 인쇄 / PDF]</span> 버튼을 누르면 A4 포스터 카드 형태로 깔끔하게 인쇄됩니다.
+                      </span>
+                      <span className="font-bold">선택작: {filteredSubmissions.length}개</span>
+                    </div>
+
+                    {/* Printable Grid Area */}
+                    <div className="print-area grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {filteredSubmissions.map((sub) => {
+                        // Find historical context description for footer
+                        const kwObj = KEYWORDS_DATA.find(k => k.name === sub.keyword);
+
+                        // Card News Theme Styling Map
+                        let cardBg = "bg-slate-900 border-cyan-500/40 text-slate-100";
+                        let badgeBg = "bg-cyan-500/20 text-cyan-300 border-cyan-400/30";
+                        let charBg = "bg-cyan-500 text-slate-950";
+
+                        if (cardNewsTheme === 'sunset') {
+                          cardBg = "bg-gradient-to-br from-amber-950 via-slate-900 to-slate-950 border-amber-500/40 text-amber-50";
+                          badgeBg = "bg-amber-500/20 text-amber-300 border-amber-400/30";
+                          charBg = "bg-amber-500 text-slate-950";
+                        } else if (cardNewsTheme === 'traditional') {
+                          cardBg = "bg-[#fbf7ee] text-slate-900 border-[#d4c39c]";
+                          badgeBg = "bg-[#e8dec6] text-amber-900 border-[#c4b185]";
+                          charBg = "bg-[#8c2d19] text-white";
+                        } else if (cardNewsTheme === 'emerald') {
+                          cardBg = "bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950 border-emerald-500/40 text-emerald-50";
+                          badgeBg = "bg-emerald-500/20 text-emerald-300 border-emerald-400/30";
+                          charBg = "bg-emerald-500 text-slate-950";
+                        }
+
+                        return (
+                          <div 
+                            key={sub.id} 
+                            className={`card-news-item p-6 rounded-2xl border-2 shadow-xl flex flex-col justify-between relative overflow-hidden ${cardBg}`}
+                          >
+                            {/* Star Badge for Awarded Works */}
+                            {sub.isStarred && (
+                              <div className="absolute top-3 right-3 px-2.5 py-1 bg-amber-400 text-slate-950 text-[10px] font-black rounded-full shadow flex items-center gap-1 font-sans">
+                                ★ 우수 작품
+                              </div>
+                            )}
+
+                            <div>
+                              {/* Header Title Bar */}
+                              <div className="flex items-center justify-between border-b border-current/10 pb-3 mb-4">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xl">🌊</span>
+                                  <div>
+                                    <div className="text-[10px] opacity-70 font-sans tracking-widest font-bold">
+                                      오션중학교 • 2026 독도의 날 기념
+                                    </div>
+                                    <h4 className="text-xl font-black font-sans tracking-tight">
+                                      [{sub.keyword}] {sub.level} N행시
+                                    </h4>
+                                  </div>
+                                </div>
+                                <span className={`px-2 py-0.5 text-[10px] font-bold rounded border font-sans ${badgeBg}`}>
+                                  {sub.level}
+                                </span>
+                              </div>
+
+                              {/* Poem Lines Calligraphy Body */}
+                              <div className="space-y-3 font-batang my-5">
+                                {Object.entries(sub.lines || {}).map(([char, line]) => (
+                                  <div key={char} className="flex items-start gap-3 text-base leading-relaxed">
+                                    <span className={`w-8 h-8 rounded-lg font-sans font-black flex items-center justify-center text-lg shrink-0 shadow-sm ${charBg}`}>
+                                      {char}
+                                    </span>
+                                    <p className="pt-1 break-keep font-medium">
+                                      {line}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Footer & Educational Context Box */}
+                            <div className="pt-4 border-t border-current/10 space-y-2">
+                              {kwObj && (
+                                <div className="text-[11px] opacity-80 bg-black/10 p-2.5 rounded-lg font-sans leading-tight">
+                                  💡 <span className="font-bold">독도 상식 노트:</span> {kwObj.desc}
+                                </div>
+                              )}
+                              <div className="flex items-center justify-between font-sans text-xs opacity-90 pt-1 font-semibold">
+                                <span>오션중학교 독도 사랑 공모전</span>
+                                <span>
+                                  {sub.grade}학년 {sub.classNum}반 {sub.number}번 <strong className="text-sm ml-1">{sub.name}</strong>
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </main>
+
+          {/* Admin PIN Authentication Modal */}
+          {adminPinModal && (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="glass-panel p-6 rounded-2xl max-w-sm w-full space-y-4 border border-cyan-500/40 shadow-2xl">
+                <div className="text-center space-y-1">
+                  <div className="text-3xl">🔒</div>
+                  <h3 className="text-lg font-bold text-white">관리자 인증</h3>
+                  <p className="text-xs text-slate-400">교사 및 담당자 전용 기능입니다.</p>
+                </div>
+
+                <div>
+                  <input
+                    type="password"
+                    placeholder="인증 비밀번호 입력 (기본: 2026)"
+                    value={adminPinInput}
+                    onChange={(e) => setAdminPinInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && verifyAdminPin()}
+                    className="w-full bg-slate-900 border border-slate-700 text-center text-white text-sm rounded-xl py-2.5 outline-none focus:border-cyan-400"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setAdminPinModal(false)}
+                    className="flex-1 py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={verifyAdminPin}
+                    className="flex-1 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl"
+                  >
+                    확인
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Toast Notification Popup */}
+          {toastMessage && (
+            <div className="fixed bottom-6 right-6 z-50 bg-cyan-500 text-slate-950 px-5 py-3 rounded-2xl font-bold text-xs shadow-2xl animate-bounce">
+              {toastMessage}
+            </div>
+          )}
+
+          {/* Footer */}
+          <footer className="no-print border-t border-slate-800 py-4 text-center text-xs text-slate-500 mt-auto">
+            오션중학교 2026 독도의 날 기념 독도교육주간 • 대한민국 독도 영토 주권 수호 행사
+          </footer>
+        </div>
+      );
+    }
+
+    const rootElement = document.getElementById('root');
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(<DokdoApp />);
+  </script>
+</body>
+</html>
