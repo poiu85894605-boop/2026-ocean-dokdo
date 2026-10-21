@@ -308,10 +308,21 @@
       const [adminFilterWord, setAdminFilterWord] = useState('전체');
       const [adminSearch, setAdminSearch] = useState('');
       const [cardNewsTheme, setCardNewsTheme] = useState('ocean'); // 'ocean', 'sunset', 'traditional', 'emerald'
-      const [adminViewTab, setAdminViewTab] = useState('list'); // 'list' or 'cardnews'
+      const [adminViewTab, setAdminViewTab] = useState('list'); // 'list', 'cardnews', or 'sheets'
       const [adminPinModal, setAdminPinModal] = useState(false);
       const [adminPinInput, setAdminPinInput] = useState('');
       const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+
+      // Google Sheets Webhook URL state with LocalStorage persistence
+      const [sheetsWebhookUrl, setSheetsWebhookUrl] = useState(() => {
+        return localStorage.getItem('ocean_dokdo_sheets_url') || '';
+      });
+
+      const saveSheetsUrl = (url) => {
+        setSheetsWebhookUrl(url);
+        localStorage.setItem('ocean_dokdo_sheets_url', url);
+        showToast('💾 Google Sheets 웹앱 URL이 저장되었습니다.');
+      };
 
       // Modal & Toast Notification State
       const [toastMessage, setToastMessage] = useState(null);
@@ -464,6 +475,32 @@
           createdAt: new Date()
         };
 
+        // 1. Sync to Google Sheets via Webhook if configured
+        if (sheetsWebhookUrl && sheetsWebhookUrl.trim()) {
+          const formattedPoemText = Object.entries(poemLines)
+            .map(([char, line]) => `[${char}] ${line}`)
+            .join('\n');
+
+          const sheetsPayload = {
+            timestamp: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
+            grade: studentGrade,
+            classNum: studentClass,
+            number: studentNumber,
+            name: studentName.trim(),
+            keyword: selectedKeyword.name,
+            level: selectedKeyword.level,
+            poemText: formattedPoemText
+          };
+
+          fetch(sheetsWebhookUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sheetsPayload)
+          }).catch(err => console.warn('Google Sheets transmission note:', err));
+        }
+
+        // 2. Save to Firestore DB
         const fb = window.oceanFirebase;
         const db = fb ? fb.getDb() : null;
 
@@ -479,7 +516,6 @@
             });
           } catch (e) {
             console.error("Firestore save error, saving locally:", e);
-            // Fallback save to local state
             setSubmissions(prev => [{ id: 'local-' + Date.now(), ...newPoemData, createdAt: { seconds: Date.now() / 1000 } }, ...prev]);
           }
         } else {
@@ -992,7 +1028,7 @@
                   </div>
 
                   {/* Mode & Export Controls */}
-                  <div className="flex items-center gap-2 w-full md:w-auto">
+                  <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
                     <button
                       onClick={() => setAdminViewTab('list')}
                       className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
@@ -1001,7 +1037,7 @@
                           : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      📋 시트 목록 보기 ({filteredSubmissions.length})
+                      📋 시트 목록 ({filteredSubmissions.length})
                     </button>
                     <button
                       onClick={() => setAdminViewTab('cardnews')}
@@ -1011,7 +1047,17 @@
                           : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      🖼️ 카드뉴스 출력 모드
+                      🖼️ 카드뉴스 출력
+                    </button>
+                    <button
+                      onClick={() => setAdminViewTab('sheets')}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                        adminViewTab === 'sheets'
+                          ? 'bg-emerald-600 text-white shadow-lg'
+                          : 'bg-slate-900/60 text-emerald-400 hover:text-emerald-300 border border-emerald-500/30'
+                      }`}
+                    >
+                      📊 구글 시트 연동 설정
                     </button>
                     <button
                       onClick={() => window.print()}
@@ -1023,62 +1069,64 @@
                 </div>
 
                 {/* Filters & Search Control Bar */}
-                <div className="glass-panel p-4 rounded-xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 no-print">
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">코스 난이도 필터</label>
-                    <select
-                      value={adminFilterLevel}
-                      onChange={(e) => setAdminFilterLevel(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-3 py-2 outline-none"
-                    >
-                      <option value="전체">전체 난이도</option>
-                      <option value="초급">초급 (3행시)</option>
-                      <option value="중급">중급 (4행시)</option>
-                      <option value="상급">상급 (5행시)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">제시어 필터</label>
-                    <select
-                      value={adminFilterWord}
-                      onChange={(e) => setAdminFilterWord(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-3 py-2 outline-none"
-                    >
-                      <option value="전체">전체 제시어</option>
-                      {KEYWORDS_DATA.map(k => (
-                        <option key={k.id} value={k.name}>{k.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">이름 / 제시어 검색</label>
-                    <input
-                      type="text"
-                      placeholder="검색어 입력..."
-                      value={adminSearch}
-                      onChange={(e) => setAdminSearch(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-3 py-2 outline-none"
-                    />
-                  </div>
-
-                  {adminViewTab === 'cardnews' && (
+                {adminViewTab !== 'sheets' && (
+                  <div className="glass-panel p-4 rounded-xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 no-print">
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">카드뉴스 테마</label>
+                      <label className="block text-xs text-slate-400 mb-1">코스 난이도 필터</label>
                       <select
-                        value={cardNewsTheme}
-                        onChange={(e) => setCardNewsTheme(e.target.value)}
+                        value={adminFilterLevel}
+                        onChange={(e) => setAdminFilterLevel(e.target.value)}
                         className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-3 py-2 outline-none"
                       >
-                        <option value="ocean">🌊 푸른 동해 (기본)</option>
-                        <option value="sunset">🌅 독도 일출 (골드)</option>
-                        <option value="traditional">📜 고지도 한지 (전통)</option>
-                        <option value="emerald">🌿 청정 독도 (에메랄드)</option>
+                        <option value="전체">전체 난이도</option>
+                        <option value="초급">초급 (3행시)</option>
+                        <option value="중급">중급 (4행시)</option>
+                        <option value="상급">상급 (5행시)</option>
                       </select>
                     </div>
-                  )}
-                </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">제시어 필터</label>
+                      <select
+                        value={adminFilterWord}
+                        onChange={(e) => setAdminFilterWord(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-3 py-2 outline-none"
+                      >
+                        <option value="전체">전체 제시어</option>
+                        {KEYWORDS_DATA.map(k => (
+                          <option key={k.id} value={k.name}>{k.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">이름 / 제시어 검색</label>
+                      <input
+                        type="text"
+                        placeholder="검색어 입력..."
+                        value={adminSearch}
+                        onChange={(e) => setAdminSearch(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-3 py-2 outline-none"
+                      />
+                    </div>
+
+                    {adminViewTab === 'cardnews' && (
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">카드뉴스 테마</label>
+                        <select
+                          value={cardNewsTheme}
+                          onChange={(e) => setCardNewsTheme(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-3 py-2 outline-none"
+                        >
+                          <option value="ocean">🌊 푸른 동해 (기본)</option>
+                          <option value="sunset">🌅 독도 일출 (골드)</option>
+                          <option value="traditional">📜 고지도 한지 (전통)</option>
+                          <option value="emerald">🌿 청정 독도 (에메랄드)</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* TAB 1: Admin Data Table View */}
                 {adminViewTab === 'list' && (
@@ -1148,103 +1196,165 @@
                 )}
 
                 {/* TAB 2: Card News Output Printable View */}
-                {adminViewTab === 'cardnews' && (
-                  <div className="space-y-4">
-                    <div className="no-print bg-amber-500/10 border border-amber-500/30 p-3.5 rounded-xl text-xs text-amber-300 flex items-center justify-between">
-                      <span>
-                        💡 <b>카드뉴스 게시 사용법:</b> 상단 <span className="font-bold underline cursor-pointer" onClick={() => window.print()}>[🖨️ 카드뉴스 인쇄 / PDF]</span> 버튼을 누르면 A4 포스터 카드 형태로 깔끔하게 인쇄됩니다.
-                      </span>
-                      <span className="font-bold">선택작: {filteredSubmissions.length}개</span>
+                {/* TAB 3: Google Sheets Integration Setup */}
+                {adminViewTab === 'sheets' && (
+                  <div className="glass-panel p-6 rounded-2xl space-y-6 border border-emerald-500/30">
+                    <div className="flex items-center justify-between border-b border-slate-700/80 pb-4">
+                      <div>
+                        <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs font-bold rounded border border-emerald-500/40">
+                          실시간 수집 설정
+                        </span>
+                        <h3 className="text-xl font-bold text-white mt-1">
+                          📊 구글 스프레드시트 수집 연동
+                        </h3>
+                      </div>
+                      <a
+                        href="https://docs.google.com/spreadsheets/d/1oeNYFMiNSQ1Rv0BzjLnAc55aWUaGzFUEn7Sb0G6cKSI/edit?gid=0#gid=0"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow"
+                      >
+                        <span>🔗 지정된 Google Sheet 바로가기</span>
+                        <span>↗</span>
+                      </a>
                     </div>
 
-                    {/* Printable Grid Area */}
-                    <div className="print-area grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {filteredSubmissions.map((sub) => {
-                        // Find historical context description for footer
-                        const kwObj = KEYWORDS_DATA.find(k => k.name === sub.keyword);
+                    {/* Webhook Input Field */}
+                    <div className="bg-slate-900/90 p-5 rounded-xl border border-slate-700 space-y-3">
+                      <label className="block text-sm font-bold text-slate-200">
+                        1. Google Apps Script 웹앱 URL 입력 (연동 주소)
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          placeholder="https://script.google.com/macros/s/.../exec"
+                          value={sheetsWebhookUrl}
+                          onChange={(e) => setSheetsWebhookUrl(e.target.value)}
+                          className="flex-1 bg-slate-950 border border-slate-700 text-xs text-white rounded-xl px-4 py-2.5 outline-none focus:border-emerald-400"
+                        />
+                        <button
+                          onClick={() => saveSheetsUrl(sheetsWebhookUrl)}
+                          className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow transition-all shrink-0"
+                        >
+                          저장하기
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        {sheetsWebhookUrl ? (
+                          <span className="text-emerald-400 font-semibold">✅ 현재 웹앱 URL이 저장되어 있으며, 학생 제출 시 구글 시트로 자동 전송됩니다.</span>
+                        ) : (
+                          <span className="text-amber-400">⚠️ 저장된 URL이 없습니다. 아래 3단계 가이드에 따라 배포 후 URL을 입력해 주세요.</span>
+                        )}
+                      </p>
+                    </div>
 
-                        // Card News Theme Styling Map
-                        let cardBg = "bg-slate-900 border-cyan-500/40 text-slate-100";
-                        let badgeBg = "bg-cyan-500/20 text-cyan-300 border-cyan-400/30";
-                        let charBg = "bg-cyan-500 text-slate-950";
+                    {/* Step-by-Step Google Apps Script Integration Guide */}
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-bold text-cyan-300">
+                        🛠️ 지정 구글 시트 연동 3단계 가이드 (최초 1회만 설정)
+                      </h4>
 
-                        if (cardNewsTheme === 'sunset') {
-                          cardBg = "bg-gradient-to-br from-amber-950 via-slate-900 to-slate-950 border-amber-500/40 text-amber-50";
-                          badgeBg = "bg-amber-500/20 text-amber-300 border-amber-400/30";
-                          charBg = "bg-amber-500 text-slate-950";
-                        } else if (cardNewsTheme === 'traditional') {
-                          cardBg = "bg-[#fbf7ee] text-slate-900 border-[#d4c39c]";
-                          badgeBg = "bg-[#e8dec6] text-amber-900 border-[#c4b185]";
-                          charBg = "bg-[#8c2d19] text-white";
-                        } else if (cardNewsTheme === 'emerald') {
-                          cardBg = "bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950 border-emerald-500/40 text-emerald-50";
-                          badgeBg = "bg-emerald-500/20 text-emerald-300 border-emerald-400/30";
-                          charBg = "bg-emerald-500 text-slate-950";
-                        }
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                        <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800 space-y-2">
+                          <div className="font-bold text-emerald-400">1단계: Apps Script 열기</div>
+                          <p className="text-slate-300 leading-relaxed">
+                            구글 시트 상단 메뉴에서 <strong className="text-white">확장 프로그램 &gt; Apps Script</strong>를 클릭합니다.
+                          </p>
+                        </div>
 
-                        return (
-                          <div 
-                            key={sub.id} 
-                            className={`card-news-item p-6 rounded-2xl border-2 shadow-xl flex flex-col justify-between relative overflow-hidden ${cardBg}`}
+                        <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800 space-y-2">
+                          <div className="font-bold text-emerald-400">2단계: 아래 스크립트 붙여넣기</div>
+                          <p className="text-slate-300 leading-relaxed">
+                            기존 에디터 내용을 삭제하고 아래 상자의 코드 전체를 복사하여 붙여넣고 저장(Ctrl+S)합니다.
+                          </p>
+                        </div>
+
+                        <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800 space-y-2">
+                          <div className="font-bold text-emerald-400">3단계: 웹앱으로 배포하기</div>
+                          <p className="text-slate-300 leading-relaxed">
+                            우측 상단 <strong className="text-white">배포 &gt; 새 배포</strong> 선택 &rarr; 유형: <strong className="text-white">웹 앱</strong> &rarr; 액세스 권한: <strong className="text-emerald-300 font-bold">모든 사용자(Anyone)</strong> 선택 후 배포하여 URL을 복사해 위 상자에 입력하세요.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Code Block for Apps Script */}
+                      <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 relative group">
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-3 text-xs text-slate-400">
+                          <span>Google Apps Script (`Code.gs`)</span>
+                          <button
+                            onClick={() => {
+                              const codeText = `function doPost(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var data = JSON.parse(e.postData.contents);
+    
+    // 헤더 행이 없을 경우 자동 생성
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(["제출일시", "학년", "반", "번호", "이름", "제시어", "난이도", "N행시 내용"]);
+    }
+    
+    sheet.appendRow([
+      data.timestamp || new Date().toLocaleString("ko-KR"),
+      data.grade + "학년",
+      data.classNum + "반",
+      data.number + "번",
+      data.name,
+      data.keyword,
+      data.level,
+      data.poemText
+    ]);
+    
+    return ContentService.createTextOutput(JSON.stringify({ result: "success" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ result: "error", message: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+                              const textArea = document.createElement("textarea");
+                              textArea.value = codeText;
+                              document.body.appendChild(textArea);
+                              textArea.select();
+                              document.execCommand("copy");
+                              document.body.removeChild(textArea);
+                              showToast('📋 구글 스크립트 코드가 복사되었습니다!');
+                            }}
+                            className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg transition-all"
                           >
-                            {/* Star Badge for Awarded Works */}
-                            {sub.isStarred && (
-                              <div className="absolute top-3 right-3 px-2.5 py-1 bg-amber-400 text-slate-950 text-[10px] font-black rounded-full shadow flex items-center gap-1 font-sans">
-                                ★ 우수 작품
-                              </div>
-                            )}
-
-                            <div>
-                              {/* Header Title Bar */}
-                              <div className="flex items-center justify-between border-b border-current/10 pb-3 mb-4">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xl">🌊</span>
-                                  <div>
-                                    <div className="text-[10px] opacity-70 font-sans tracking-widest font-bold">
-                                      오션중학교 • 2026 독도의 날 기념
-                                    </div>
-                                    <h4 className="text-xl font-black font-sans tracking-tight">
-                                      [{sub.keyword}] {sub.level} N행시
-                                    </h4>
-                                  </div>
-                                </div>
-                                <span className={`px-2 py-0.5 text-[10px] font-bold rounded border font-sans ${badgeBg}`}>
-                                  {sub.level}
-                                </span>
-                              </div>
-
-                              {/* Poem Lines Calligraphy Body */}
-                              <div className="space-y-3 font-batang my-5">
-                                {Object.entries(sub.lines || {}).map(([char, line]) => (
-                                  <div key={char} className="flex items-start gap-3 text-base leading-relaxed">
-                                    <span className={`w-8 h-8 rounded-lg font-sans font-black flex items-center justify-center text-lg shrink-0 shadow-sm ${charBg}`}>
-                                      {char}
-                                    </span>
-                                    <p className="pt-1 break-keep font-medium">
-                                      {line}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Footer & Educational Context Box */}
-                            <div className="pt-4 border-t border-current/10 space-y-2">
-                              {kwObj && (
-                                <div className="text-[11px] opacity-80 bg-black/10 p-2.5 rounded-lg font-sans leading-tight">
-                                  💡 <span className="font-bold">독도 상식 노트:</span> {kwObj.desc}
-                                </div>
-                              )}
-                              <div className="flex items-center justify-between font-sans text-xs opacity-90 pt-1 font-semibold">
-                                <span>오션중학교 독도 사랑 공모전</span>
-                                <span>
-                                  {sub.grade}학년 {sub.classNum}반 {sub.number}번 <strong className="text-sm ml-1">{sub.name}</strong>
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                            📋 코드 복사하기
+                          </button>
+                        </div>
+                        <pre className="text-[11px] font-mono text-emerald-300 leading-relaxed overflow-x-auto p-2">
+{`function doPost(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var data = JSON.parse(e.postData.contents);
+    
+    // 헤더 행이 없을 경우 자동 생성
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(["제출일시", "학년", "반", "번호", "이름", "제시어", "난이도", "N행시 내용"]);
+    }
+    
+    sheet.appendRow([
+      data.timestamp || new Date().toLocaleString("ko-KR"),
+      data.grade + "학년",
+      data.classNum + "반",
+      data.number + "번",
+      data.name,
+      data.keyword,
+      data.level,
+      data.poemText
+    ]);
+    
+    return ContentService.createTextOutput(JSON.stringify({ result: "success" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ result: "error", message: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`}
+                        </pre>
+                      </div>
                     </div>
                   </div>
                 )}
